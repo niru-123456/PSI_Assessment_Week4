@@ -1,0 +1,132 @@
+WEEK4-ASSESSMENT
+
+→Question1:-
+
+//Configuration File
+agent1.sources = source1
+agent1.sinks = sink1
+agent1.channels = channel1
+
+agent1.sources.source1.channels = channel1
+agent1.sinks.sink1.channel = channel1
+
+//Source - Twitter
+agent1.sources.source1.type = org.apache.flume.source.twitter.TwitterSource
+agent1.sources.source1.consumerKey = 87n195J3Nl4qPJ51UhNvglEGC
+agent1.sources.source1.consumerSecret= tCa6dgx1RGbEWMVt8daGMohhyvAdsMwHieHB6Sp2iYj5O76PCX
+agent1.sources.source1.accessToken = 1240532450398228480-ejbFjtZqmNuJdozIKhyATTth63wrr9
+agent1.sources.source1.accessTokenSecret = ptmucctzFxi2xJBfuWQEJ9NBTGyeleOPDs8kiNjxIi4M1
+agent1.sources.source1.keywords = covid19
+
+//Sink - HDFS
+agent1.sinks.sink1.type = hdfs 
+agnet1.sinks.sink1.hdfs.path = /flume/twitter
+agent1.sinks.sink1.hdfs.filePrefix = events
+agent1.sinks.sink1.hdfs.fileSuffix = .log
+agent1.sinks.sink1.hdfs.inUsePrefix = _
+agent1.sinks.sink1.hdfs.fileType = DataStream
+
+//Channel
+agent1.channels.channel1.type = memory
+agent1.channels.channel1.capacity = 1000
+
+→Question2:-
+
+//Consider PetDb as the Database
+sqoop import \
+--connect jdbc:mysql://localhost:3306/PetsDb \
+--username=nirupama \
+--password=password \
+--table=pet \
+--hive-import \
+--hive-table=pet_direct \
+--target-dir /mysql/table/pet_direct \
+--m 1
+
+→Question3:-
+
+//Consider the dataset airlines.csv
+airlinePath = "hdfs:///spark/rdd/airlines.csv"
+
+//Creating RDD
+airlines = sc.textFile(airlinePath)
+
+//Performing Actions
+airlines.take(15)      //Displays first 15 elements in total
+airlines.collect()     //Retrieves all the elements
+airlines.count()       //Gives total count of all the elements
+airlines.first()       //Displays the first element
+
+→Question4:-
+
+//Importing SQLContext 
+from pyspark.sql import SQLContext, Row
+twitterPath = "hdfs:///spark/sql/cache-0.json"
+
+sqlC = SQLContext(sc)
+twitterTable = sqlC.read.json(twitterPath)
+twitterTable.registerTempTable("twitTab")
+
+sqlC.sql("Select text, user.screen_name from twitTab where user.screen_name='realDonaldTrump' limit 10").collect()
+
+→Question5:-
+
+from pyspark import SparkContext
+from pyspark.streaming import StreamingContext
+
+sc = SparkContext("local[2]", "StreamingErrorCount")
+ssc = StreamingContext(sc,10)
+
+ssc.checkpoint("hdfs:///spark/streaming")
+ds1 = ssc.socketTextStream("localhost",9999)
+count = ds1 \
+	.flatMap(lambda x:x.split(" ")) \
+	.filter(lambda word:"ERROR" in word) \
+	.map(lambda word:(word,1)) \
+	.reduceByKey(lambda x,y:x+y)
+
+count.pprint()
+ssc.start()
+ssc.awaitTermination()
+
+→Question6:-
+
+flightsPath = "hdfs:///spark/rdd/flights.csv"
+//Creating RDD
+flights = sc.textFile(flightsPath)
+flights.take(5)
+
+//Parse Function
+
+from datetime import datetime
+from collections import namedtuple
+
+fields = ('date','airline','flightnum','origin','dest','dep','dep_delay','arv','arv_delay','airtime','distance')
+
+Flight  = namedtuple('Flight',fields, verbose=False)
+DATE_FMT = '%Y-%m-%d'
+TIME_FMT = '%H%M%S'
+
+def parse(row):
+    row[0] = datetime.strptime(row[0], DATE_FMT).date()
+    row[5] = datetime.strptime(row[5], TIME_FMT).time()
+    row[6] = float(row[6])
+    row[7] = datetime.strptime(row[7], TIME_FMT).time()
+    row[8] = float(row[8])
+    row[9] = float(row[9])
+    row[10] = float(row[10])
+    return Flight(*row[:11])
+                   
+flightsParsed=flights.map(lambda x: x.split(',')).map(parse)
+flightsParsed.first()
+
+//Finding the average delay in flights
+sumCount = flightsParsed.map(lambda x:x.dep_delay).aggregate((0,0),
+(lambda acc,value: (acc[0]+value, acc[1]+1)),
+(lambda acc1,acc2:(acc1[0]+acc2[0],acc1[1]+acc2[1])))
+
+print "The average delay in flights is "+str(sumCount[0]/float(sumCount[1]))
+
+
+
+
